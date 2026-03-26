@@ -42,6 +42,13 @@ class GlobalExceptionHandler {
         )
     }
 
+    @ExceptionHandler(UnauthorizedException::class)
+    fun handleUnauthorized(ex: UnauthorizedException): ResponseEntity<ErrorResponse> {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
+            ErrorResponse(error = "UNAUTHORIZED", message = ex.message ?: "Unauthorized")
+        )
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun handleBadRequest(ex: HttpMessageNotReadableException): ResponseEntity<ErrorResponse> {
         return ResponseEntity.badRequest().body(

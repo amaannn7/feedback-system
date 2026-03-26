@@ -1,219 +1,65 @@
-# Chat Session Feedback Mini-System
+﻿# Chat Session Feedback System
 
-A full-stack feedback system where customers rate their chat interactions (1–5) through unique feedback links, and enterprise admins configure feedback form appearance.
+Full-stack system for collecting chat session feedback via unique, time-limited links. Admins configure feedback forms, create & send feedback links, and view analytics. Customers rate 1-5 stars.
 
 ## Tech Stack
 
 - **Backend:** Spring Boot 4 + Kotlin + MongoDB
 - **Frontend:** Next.js 16 + React 19 + Tailwind CSS 4
-- **Persistence:** MongoDB
-
-## Prerequisites
-
-- **Java 17+** (for Spring Boot backend)
-- **Node.js 20+** (for Next.js frontend)
-- **MongoDB** running on `localhost:27017`
 
 ## Quick Start
 
-### 1. Start MongoDB
-
-```bash
-# If installed locally
-mongod
-
-# Or with Docker
+# 1. MongoDB
 docker run -d -p 27017:27017 --name feedback-mongo mongo:7
-```
 
-### 2. Start Backend
-
-```bash
+# 2. Backend (http://localhost:8080)
 cd backend
-./gradlew bootRun       # macOS/Linux
-gradlew.bat bootRun     # Windows
-```
+./gradlew bootRun       # or gradlew.bat on Windows
 
-Backend starts at **http://localhost:8080**. Demo data is auto-seeded on first run.
-
-### 3. Start Frontend
-
-```bash
+# 3. Frontend (http://localhost:3000)
 cd frontend
-npm install
 npm run dev
-```
 
-Frontend starts at **http://localhost:3000**.
 
-### 4. Test the Application
+Open http://localhost:3000 -- log into admin with key `demo-admin-key`
 
-Open http://localhost:3000 — you'll see:
-- **Admin page** link for `demo-enterprise`
-- **Feedback page** links in 3 states: valid, expired, already used
+## Features
 
-## Running Tests
+- **Admin auth** -- API key-gated admin endpoints (`X-Admin-Key` header, verified server-side)
+- **Form config** -- GET/PUT enterprise feedback form with full validation
+- **Feedback link creation** -- POST to create a feedback request, returns a shareable URL (24h expiry)
+- **Public feedback page** -- Star rating UI with expired/responded/error states
+- **Analytics dashboard** -- Counts, average rating, rating distribution, request table
+- **Seed data** -- Demo config + 3 feedback requests auto-created on first boot
 
-### Backend Tests
-
-```bash
-cd backend
-./gradlew test          # macOS/Linux
-gradlew.bat test        # Windows
-```
-
-### Frontend Tests
+## Tests
 
 ```bash
-cd frontend
-npm test
+cd backend && ./gradlew test
+cd frontend && npm test
 ```
 
-## API Documentation
+## API Endpoints
 
-### Admin APIs
+All admin endpoints require `X-Admin-Key` header. Returns 401 if invalid.
 
-#### GET /api/admin/enterprises/{enterpriseId}/session-feedback-form
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/auth/verify` | Verify admin API key |
+| GET | `/api/admin/enterprises/{id}/session-feedback-form` | Get form config |
+| PUT | `/api/admin/enterprises/{id}/session-feedback-form` | Save form config |
+| GET | `/api/admin/enterprises/{id}/feedback-requests` | List feedback requests |
+| POST | `/api/admin/enterprises/{id}/feedback-requests` | Create feedback request |
+| GET | `/api/admin/enterprises/{id}/stats` | Get analytics |
+| GET | `/api/public/feedback/{feedbackId}` | Load feedback page data |
+| POST | `/api/public/feedback/{feedbackId}/respond` | Submit rating (1-5) |
 
-Returns the feedback form configuration for an enterprise.
+## Error Codes
 
-**Response 200:**
-```json
-{
-  "enterpriseId": "demo-enterprise",
-  "headerText": "How was your experience?",
-  "headerDescription": "We'd love to hear about your recent chat interaction.",
-  "footerText": "Your feedback is anonymous and appreciated.",
-  "ratingLabels": ["Very Poor", "Poor", "Average", "Good", "Excellent"],
-  "thankYouText": "Thank you for your feedback!",
-  "invalidReplyText": "Sorry, that's not a valid response.",
-  "expiredReplyText": "Sorry, this feedback link has expired.",
-  "skipForChannels": []
-}
-```
-
-**Response 404:** No configuration exists for this enterprise.
-
-#### PUT /api/admin/enterprises/{enterpriseId}/session-feedback-form
-
-Create or update the feedback form configuration.
-
-**Request Body:**
-```json
-{
-  "headerText": "How was your experience?",
-  "headerDescription": "Please rate your recent interaction.",
-  "footerText": "Your feedback is anonymous.",
-  "ratingLabels": ["Very Poor", "Poor", "Average", "Good", "Excellent"],
-  "thankYouText": "Thank you for your feedback!",
-  "invalidReplyText": "Please select a rating from 1 to 5.",
-  "expiredReplyText": "This feedback link has expired.",
-  "skipForChannels": ["WHATSAPP"]
-}
-```
-
-**Response 200:** Updated configuration (same shape as GET).
-
-**Response 400:** Validation errors:
-```json
-{
-  "error": "VALIDATION_ERROR",
-  "message": "Validation failed",
-  "fieldErrors": {
-    "headerText": "Header text is required",
-    "ratingLabels": "Exactly 5 rating labels are required"
-  }
-}
-```
-
-### Public APIs
-
-#### GET /api/public/feedback/{feedbackId}
-
-Load feedback request data for the public page.
-
-**Response 200 (pending):**
-```json
-{
-  "feedbackId": "feedback-valid",
-  "status": "PENDING",
-  "form": {
-    "headerText": "How was your experience?",
-    "headerDescription": "...",
-    "footerText": "...",
-    "ratingLabels": ["Very Poor", "Poor", "Average", "Good", "Excellent"]
-  },
-  "message": null
-}
-```
-
-**Response 200 (expired/responded):**
-```json
-{
-  "feedbackId": "feedback-expired",
-  "status": "EXPIRED",
-  "form": null,
-  "message": "Sorry, this feedback link has expired."
-}
-```
-
-#### POST /api/public/feedback/{feedbackId}/respond
-
-Submit a rating for a feedback request.
-
-**Request Body:**
-```json
-{
-  "rating": 4
-}
-```
-
-**Response 200:**
-```json
-{
-  "feedbackId": "feedback-valid",
-  "status": "RESPONDED",
-  "message": "Thank you for your feedback!"
-}
-```
-
-**Error Responses:**
-| Status | Error Code | Condition |
-|--------|-----------|-----------|
-| 400 | VALIDATION_ERROR | Rating is null or not 1–5 |
-| 404 | NOT_FOUND | Unknown feedbackId |
+| Status | Code | When |
+|--------|------|------|
+| 400 | VALIDATION_ERROR | Invalid input |
+| 401 | UNAUTHORIZED | Bad/missing admin key |
+| 404 | NOT_FOUND | Unknown resource |
 | 409 | ALREADY_RESPONDED | Feedback already submitted |
 | 410 | EXPIRED | Feedback link expired |
-
-## Validation Rules
-
-| Field | Rules |
-|-------|-------|
-| headerText | Required, non-blank, max 200 characters |
-| headerDescription | Optional (nullable), max 500 characters if provided |
-| footerText | Optional (nullable), max 200 characters if provided |
-| ratingLabels | Required, exactly 5 items, each non-blank, max 50 chars each |
-| thankYouText | Required, non-blank, max 500 characters |
-| invalidReplyText | Required, non-blank, max 500 characters |
-| expiredReplyText | Required, non-blank, max 500 characters |
-| skipForChannels | Optional, valid values: WHATSAPP, INSTAGRAM, MESSENGER, WEB_CHAT, no duplicates |
-
-## Demo Data
-
-Automatically seeded on first backend startup:
-
-| ID | Type | State |
-|----|------|-------|
-| `demo-enterprise` | Enterprise config | Fully configured feedback form |
-| `feedback-valid` | Feedback request | PENDING, expires in 24h |
-| `feedback-expired` | Feedback request | EXPIRED |
-| `feedback-used` | Feedback request | RESPONDED (rating: 4) |
-
-## Assumptions
-
-- No authentication is required for admin endpoints (out of scope per spec)
-- MongoDB runs locally without authentication
-- Channel values are case-insensitive on input, stored uppercase
-- Blank optional string fields are normalized to null
-- Feedback requests are created externally (the creation mechanism is out of scope)
-- The frontend development server proxies API calls to the backend via Next.js rewrites

@@ -1,18 +1,18 @@
 package feedback.system.service
 
-import feedback.system.dto.FeedbackFormView
-import feedback.system.dto.FeedbackPageData
-import feedback.system.dto.FeedbackRespondRequest
-import feedback.system.dto.FeedbackRespondResponse
+import feedback.system.dto.*
 import feedback.system.exception.FeedbackAlreadyRespondedException
 import feedback.system.exception.FeedbackExpiredException
 import feedback.system.exception.NotFoundException
 import feedback.system.exception.ValidationException
+import feedback.system.model.Channel
+import feedback.system.model.FeedbackRequest
 import feedback.system.model.FeedbackStatus
 import feedback.system.repository.FeedbackFormConfigRepository
 import feedback.system.repository.FeedbackRequestRepository
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 @Service
 class FeedbackService(
@@ -120,4 +120,83 @@ class FeedbackService(
             message = config?.thankYouText ?: "Thank you for your feedback!"
         )
     }
+
+    fun createFeedbackRequest(enterpriseId: String, request: CreateFeedbackRequestRequest): CreateFeedbackRequestResponse {
+        feedbackFormConfigRepository.findByEnterpriseId(enterpriseId)
+            ?: throw NotFoundException("No feedback form configured for enterprise: $enterpriseId")
+
+        val errors = mutableMapOf<String, String>()
+        if (request.sessionId.isNullOrBlank()) {
+            errors["sessionId"] = "Session ID is required"
+        }
+        if (request.channel.isNullOrBlank()) {
+            errors["channel"] = "Channel is required"
+        } else {
+            val validChannels = Channel.entries.map { it.name }.toSet()
+            if (request.channel.trim().uppercase() !in validChannels) {
+                errors["channel"] = "Invalid channel. Valid values: ${validChannels.joinToString()}"
+            }
+        }
+        if (errors.isNotEmpty()) throw ValidationException(errors)
+
+        val saved = feedbackRequestRepository.save(
+            FeedbackRequest(
+                enterpriseId = enterpriseId,
+                sessionId = request.sessionId!!.trim(),
+                channel = request.channel!!.trim().uppercase(),
+                status = FeedbackStatus.PENDING,
+                expiresAt = Instant.now().plus(24, ChronoUnit.HOURS)
+            )
+        )
+
+        return CreateFeedbackRequestResponse(
+            id = saved.id!!,
+            enterpriseId = saved.enterpriseId,
+            sessionId = saved.sessionId,
+            channel = saved.channel,
+            status = saved.status.name,
+            expiresAt = saved.expiresAt,
+            feedbackUrl = "/feedback/${saved.id}"
+        )
+    }
+
+    fun getStats(enterpriseId: String): FeedbackStatsResponse {
+        val pendingCount = feedbackRequestRepository.countByEnterpriseIdAndStatus(enterpriseId, FeedbackStatus.PENDING)
+        val respondedCount = feedbackRequestRepository.countByEnterpriseIdAndStatus(enterpriseId, FeedbackStatus.RESPONDED)
+        val expiredCount = feedbackRequestRepository.countByEnterpriseIdAndStatus(enterpriseId, FeedbackStatus.EXPIRED)
+        val totalCount = pendingCount + respondedCount + expiredCount
+
+        val respondedRequests = feedbackRequestRepository.findByEnterpriseIdAndStatus(enterpriseId, FeedbackStatus.RESPONDED)
+        val ratings = respondedRequests.mapNotNull { it.rating }
+        val averageRating = if (ratings.isNotEmpty()) ratings.average() else null
+        val ratingDistribution = (1..5).associateWith { r -> ratings.count { it == r }.toLong() }
+
+        return FeedbackStatsResponse(
+            enterpriseId = enterpriseId,
+            totalCount = totalCount,
+            pendingCount = pendingCount,
+            respondedCount = respondedCount,
+            expiredCount = expiredCount,
+            averageRating = averageRating,
+            ratingDistribution = ratingDistribution
+        )
+    }
+
+    fun listFeedbackRequests(enterpriseId: String): List<FeedbackRequestListItem> {
+        return feedbackRequestRepository.findByEnterpriseId(enterpriseId)
+            .sortedByDescending { it.createdAt }
+            .map { toListItem(it) }
+    }
+
+    private fun toListItem(request: FeedbackRequest) = FeedbackRequestListItem(
+        id = request.id!!,
+        enterpriseId = request.enterpriseId,
+        sessionId = request.sessionId,
+        channel = request.channel,
+        rating = request.rating,
+        status = request.status.name,
+        expiresAt = request.expiresAt,
+        respondedAt = request.respondedAt,
+        createdAt = request.createdAt
+    )
 }
