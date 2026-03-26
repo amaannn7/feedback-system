@@ -10,7 +10,8 @@ Full-stack system for collecting chat session feedback via unique, time-limited 
 ## Quick Start
 
 # 1. MongoDB
-docker run -d -p 27017:27017 --name feedback-mongo mongo:7
+Open MongoDB Compass and connect to localhost:27017.
+Database "feedback-system" will be created automatically on first boot
 
 # 2. Backend (http://localhost:8080)
 cd backend
