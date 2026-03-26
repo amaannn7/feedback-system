@@ -9,7 +9,7 @@
 
 ## Assumptions
 
-- MongoDB runs locally
+- MongoDB runs locally.
 - Feedback links are single-use (second submit → 409 Conflict).
 - Expiration is lazy (checked on access, no background job).
 - Auth is API-key based, not production-grade.
